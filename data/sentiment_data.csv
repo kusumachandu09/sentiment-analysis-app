@@ -1,0 +1,25 @@
+text,sentiment
+"I love this product",positive
+"This product is amazing",positive
+"Excellent quality and service",positive
+"I really enjoyed this movie",positive
+"This is fantastic",positive
+"I am very happy with this purchase",positive
+"The product works perfectly",positive
+"Great experience overall",positive
+"I hate this product",negative
+"This product is terrible",negative
+"Very bad experience",negative
+"I did not like this movie",negative
+"Completely disappointing",negative
+"The quality is horrible",negative
+"Worst purchase ever",negative
+"I am very unhappy with this service",negative
+"The product is okay",neutral
+"It is an average product",neutral
+"Nothing special about it",neutral
+"The experience was normal",neutral
+"It works as expected",neutral
+"The movie was okay",neutral
+"I have mixed feelings about this",neutral
+"The service was neither good nor bad",neutral
