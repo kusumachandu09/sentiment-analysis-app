@@ -1,6 +1,4 @@
 import os
-import sys
-
 import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
@@ -23,76 +21,99 @@ from sklearn.metrics import (
     confusion_matrix
 )
 
-# Allow importing preprocess.py
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from preprocess import clean_text
-
-
 # --------------------------------------------------
-# 1. Load dataset
+# 1. PROJECT PATHS
 # --------------------------------------------------
+
+# train.py is inside src folder
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Main project folder is one level above src
+BASE_DIR = os.path.dirname(SRC_DIR)
 
 DATA_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
+    BASE_DIR,
     "data",
     "sentiment_data.csv"
 )
 
 MODEL_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
+    BASE_DIR,
     "models"
 )
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 
+# Import preprocessing function from same src folder
+from preprocess import clean_text
 
-print("Loading dataset...")
+print("Project directory:", BASE_DIR)
+print("Dataset path:", DATA_PATH)
+print("Model directory:", MODEL_DIR)
+
+# Check dataset exists
+if not os.path.exists(DATA_PATH):
+    raise FileNotFoundError(
+        f"Dataset not found. Please check: {DATA_PATH}"
+    )
+
+# --------------------------------------------------
+# 2. LOAD DATASET
+# --------------------------------------------------
+
+print("\nLoading dataset...")
 
 df = pd.read_csv(DATA_PATH)
 
-print("\nDataset:")
+# Check required columns
+if not {"text", "sentiment"}.issubset(df.columns):
+    raise ValueError(
+        "CSV must contain 'text' and 'sentiment' columns."
+    )
+
+print("\nDataset preview:")
 print(df.head())
 
-print("\nDataset shape:")
+print("\nOriginal dataset shape:")
+print(df.shape)
+
+# --------------------------------------------------
+# 3. CLEAN DATASET
+# --------------------------------------------------
+
+df = df.dropna(subset=["text", "sentiment"])
+df = df.drop_duplicates()
+
+df["text"] = df["text"].astype(str)
+df["sentiment"] = df["sentiment"].astype(str).str.strip().str.lower()
+
+print("\nDataset after cleaning:")
 print(df.shape)
 
 print("\nSentiment distribution:")
 print(df["sentiment"].value_counts())
 
+if df["sentiment"].nunique() < 2:
+    raise ValueError("Dataset must contain at least two sentiment classes.")
+
+if df["sentiment"].value_counts().min() < 2:
+    raise ValueError(
+        "Each sentiment class must have at least two records for stratified splitting."
+    )
 
 # --------------------------------------------------
-# 2. Remove missing values
-# --------------------------------------------------
-
-df = df.dropna(subset=["text", "sentiment"])
-
-# Remove duplicate rows
-df = df.drop_duplicates()
-
-print("\nDataset after cleaning:")
-print(df.shape)
-
-
-# --------------------------------------------------
-# 3. Clean text
+# 4. TEXT PREPROCESSING
 # --------------------------------------------------
 
 print("\nCleaning text...")
 
 df["clean_text"] = df["text"].apply(clean_text)
 
-
-# --------------------------------------------------
-# 4. Input and output
-# --------------------------------------------------
-
 X = df["clean_text"]
 y = df["sentiment"]
 
-
 # --------------------------------------------------
-# 5. Train-test split
+# 5. TRAIN TEST SPLIT
 # --------------------------------------------------
 
 X_train, X_test, y_train, y_test = train_test_split(
@@ -103,13 +124,11 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=y
 )
 
-
 print("\nTraining samples:", len(X_train))
 print("Testing samples:", len(X_test))
 
-
 # --------------------------------------------------
-# 6. Create ML models
+# 6. CREATE MODELS
 # --------------------------------------------------
 
 models = {
@@ -123,12 +142,9 @@ models = {
                 sublinear_tf=True
             )
         ),
-
         (
             "classifier",
-            LogisticRegression(
-                max_iter=1000
-            )
+            LogisticRegression(max_iter=1000)
         )
     ]),
 
@@ -140,7 +156,6 @@ models = {
                 ngram_range=(1, 2)
             )
         ),
-
         (
             "classifier",
             MultinomialNB()
@@ -156,7 +171,6 @@ models = {
                 sublinear_tf=True
             )
         ),
-
         (
             "classifier",
             LinearSVC()
@@ -164,17 +178,15 @@ models = {
     ])
 }
 
-
 # --------------------------------------------------
-# 7. Train and evaluate
+# 7. TRAIN AND EVALUATE MODELS
 # --------------------------------------------------
 
 results = {}
 
 best_model = None
 best_model_name = None
-best_f1 = 0
-
+best_f1 = -1
 
 for name, model in models.items():
 
@@ -182,13 +194,10 @@ for name, model in models.items():
     print("Training:", name)
     print("=" * 60)
 
-    # Train model
     model.fit(X_train, y_train)
 
-    # Predictions
     predictions = model.predict(X_test)
 
-    # Metrics
     accuracy = accuracy_score(y_test, predictions)
 
     precision = precision_score(
@@ -234,30 +243,35 @@ for name, model in models.items():
         )
     )
 
-    # Select best model using F1 score
     if f1 > best_f1:
-
         best_f1 = f1
         best_model = model
         best_model_name = name
 
-
 # --------------------------------------------------
-# 8. Print comparison
+# 8. SAVE MODEL COMPARISON RESULTS
 # --------------------------------------------------
-
-print("\n")
-print("=" * 70)
-print("MODEL COMPARISON")
-print("=" * 70)
 
 results_df = pd.DataFrame(results).T
 
+print("\nMODEL COMPARISON")
+print("=" * 60)
 print(results_df)
 
+results_path = os.path.join(
+    MODEL_DIR,
+    "model_results.csv"
+)
+
+results_df.to_csv(
+    results_path,
+    index_label="Model"
+)
+
+print("\nResults saved at:", results_path)
 
 # --------------------------------------------------
-# 9. Save best model
+# 9. SAVE BEST MODEL
 # --------------------------------------------------
 
 MODEL_PATH = os.path.join(
@@ -268,22 +282,21 @@ MODEL_PATH = os.path.join(
 joblib.dump(best_model, MODEL_PATH)
 
 print("\nBest model:", best_model_name)
-
 print("Best F1 Score:", round(best_f1, 4))
-
-print("\nModel saved at:")
-print(MODEL_PATH)
-
+print("Model saved at:", MODEL_PATH)
 
 # --------------------------------------------------
-# 10. Confusion matrix
+# 10. CONFUSION MATRIX
 # --------------------------------------------------
 
 best_predictions = best_model.predict(X_test)
 
+class_labels = sorted(y.unique())
+
 cm = confusion_matrix(
     y_test,
-    best_predictions
+    best_predictions,
+    labels=class_labels
 )
 
 plt.figure(figsize=(7, 5))
@@ -292,8 +305,9 @@ sns.heatmap(
     cm,
     annot=True,
     fmt="d",
-    xticklabels=sorted(y.unique()),
-    yticklabels=sorted(y.unique())
+    cmap="Blues",
+    xticklabels=class_labels,
+    yticklabels=class_labels
 )
 
 plt.xlabel("Predicted")
@@ -307,23 +321,23 @@ confusion_path = os.path.join(
     "confusion_matrix.png"
 )
 
-plt.savefig(confusion_path)
+plt.savefig(confusion_path, dpi=300)
+
+print("\nConfusion matrix saved at:", confusion_path)
 
 plt.show()
 
-
 # --------------------------------------------------
-# 11. Save model comparison
+# 11. TRAINING COMPLETED
 # --------------------------------------------------
 
-results_path = os.path.join(
-    MODEL_DIR,
-    "model_results.csv"
-)
+print("\n" + "=" * 60)
+print("TRAINING COMPLETED SUCCESSFULLY!")
+print("=" * 60)
 
-results_df.to_csv(results_path)
-
-print("\nResults saved at:")
-print(results_path)
-
-print("\nTraining completed successfully!")
+print("Dataset records:", len(df))
+print("Best model:", best_model_name)
+print("Best F1 Score:", round(best_f1, 4))
+print("Results file:", results_path)
+print("Model file:", MODEL_PATH)
+print("Confusion matrix:", confusion_path)
